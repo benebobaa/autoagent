@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign Transaction — Solana Yield Agent</title>
+  <style>
+    body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 40px; max-width: 800px; margin: 0 auto; }
+    h2 { color: #9945FF; }
+    label { display: block; margin-top: 20px; font-size: 13px; color: #888; }
+    textarea { width: 100%; height: 100px; background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 6px; box-sizing: border-box; }
+    button { margin-top: 20px; padding: 12px 28px; background: #9945FF; color: white; border: none; cursor: pointer; font-size: 15px; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    #status { margin-top: 20px; padding: 14px; background: #1a1a1a; border-left: 3px solid #9945FF; white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+    .success { border-left-color: #14F195 !important; color: #14F195; }
+    .error { border-left-color: #ff4444 !important; color: #ff4444; }
+  </style>
+</head>
+<body>
+  <h2>Sign & Send Transaction</h2>
+  <p style="color:#888; font-size:13px;">Paste the base64 unsigned transaction from the agent, then sign with Phantom.</p>
+
+  <label>Base64 Transaction</label>
+  <textarea id="txInput" placeholder="Paste base64 transaction here...">AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAECtn5i4R4uHHMPIGTB2bP0XOR/UGFnmAnY4/dZmDpUKZEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADnmFnzmLmfO87obQie06OOHmfJ4QbBzT7l4jZtRpVMlAQECAAAMAgAAAAAAAAAAAAAA</textarea>
+
+  <button id="connectBtn" onclick="connect()">Connect Phantom</button>
+  <button id="signBtn" onclick="signAndSend()" disabled>Sign & Send</button>
+
+  <div id="status">Waiting for Phantom connection...</div>
+
+  <script>
+    const SOLANA_RPC = 'https://mainnet.helius-rpc.com/?api-key=0b850758-2dd9-4aaf-b956-9cf624e6a4e9';
+    let provider = null;
+
+    function setStatus(msg, type = '') {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = type;
+    }
+
+    async function connect() {
+      if (!window.solana || !window.solana.isPhantom) {
+        setStatus('Phantom extension not found. Make sure it is installed and enabled.', 'error');
+        return;
+      }
+      try {
+        const resp = await window.solana.connect();
+        provider = window.solana;
+        setStatus(`Connected: ${resp.publicKey.toString()}`, 'success');
+        document.getElementById('signBtn').disabled = false;
+        document.getElementById('connectBtn').disabled = true;
+      } catch (err) {
+        setStatus(`Connection failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function signAndSend() {
+      if (!provider) { setStatus('Connect Phantom first.', 'error'); return; }
+
+      const base64 = document.getElementById('txInput').value.trim();
+      if (!base64) { setStatus('Paste a base64 transaction first.', 'error'); return; }
+
+      try {
+        setStatus('Deserializing transaction...');
+
+        // Decode base64 to Uint8Array
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+        // Fetch recent blockhash to make TX valid
+        setStatus('Fetching recent blockhash...');
+        const bhResp = await fetch(SOLANA_RPC, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getLatestBlockhash', params: [{ commitment: 'finalized' }] })
+        });
+        const bhData = await bhResp.json();
+        const blockhash = bhData.result.value.blockhash;
+        setStatus(`Blockhash: ${blockhash}\n\nSending to Phantom for signing...`);
+
+        // Use Phantom's signAndSendTransaction with the raw bytes
+        const { signature } = await provider.signAndSendTransaction({
+          serialize: () => bytes,
+          serializeMessage: () => bytes,
+        });
+
+        setStatus(`✅ SUCCESS\n\nTransaction Signature:\n${signature}\n\nCopy the signature above and run:\nnpm run cli -- confirm --position=9cce4651-00cd-42bf-952b-f96de753f91e --signature=${signature}`, 'success');
+      } catch (err) {
+        // Try alternative approach
+        try {
+          setStatus('Trying alternative signing method...');
+          const { Transaction, Connection } = await import('https://esm.sh/@solana/web3.js@1');
+          const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+          const tx = Transaction.from(bytes);
+
+          const connection = new Connection(SOLANA_RPC, 'confirmed');
+          const { blockhash } = await connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = provider.publicKey;
+
+          const signed = await provider.signTransaction(tx);
+          const sig = await connection.sendRawTransaction(signed.serialize());
+
+          setStatus(`✅ SUCCESS\n\nTransaction Signature:\n${sig}\n\nCopy the signature above and run:\nnpm run cli -- confirm --position=9cce4651-00cd-42bf-952b-f96de753f91e --signature=${sig}`, 'success');
+        } catch (err2) {
+          setStatus(`Error: ${err2.message}`, 'error');
+        }
+      }
+    }
+  </script>
+</body>
+</html>

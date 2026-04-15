@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.bak
+.env.docker
+*.txt
+data
+temp-pla

@@ -1,0 +1,98 @@
+# ============================================================
+# Solana Yield Agent — Docker Compose
+# Production-ready deployment with real infrastructure
+# ============================================================
+#
+# Services:
+#   - chroma: Vector database for RAG embeddings
+#   - agent: The yield agent (connects to mainnet via Helius)
+#
+# Usage:
+#   cp .env.docker .env
+#   # Edit .env and set your API keys (ANTHROPIC_API_KEY, SOLANA_RPC_URL, etc.)
+#   docker compose up --build
+#
+# Hot reload (development):
+#   docker compose up --build -d
+#   docker compose logs -f agent
+#
+# Stop:
+#   docker compose down
+#
+# Clean slate (removes all data):
+#   docker compose down -v
+#
+# ============================================================
+
+services:
+  # ── ChromaDB ───────────────────────────────────────────────
+  # Vector database for RAG embeddings
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.5.9
+    container_name: chroma
+    hostname: chroma
+    ports:
+      - "8000:8000"   # REST API
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agent-network
+
+  # ── Solana Yield Agent ─────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: solana-yield-agent
+    hostname: solana-yield-agent
+    depends_on:
+      chroma:
+        condition: service_healthy
+    ports:
+      - "3000:3000"   # Exposed for any HTTP endpoints
+    volumes:
+      # Mount source for hot-reload during development
+      - ./src:/app/src:ro
+      # Persistent data (SQLite DB)
+      - agent-data:/app/data
+      # Config (read-only)
+      - ./agent_config.yaml:/app/agent_config.yaml:ro
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/app/data/agent.db
+      - CHROMA_HOST=http://chroma:8000
+      - LOG_LEVEL=debug
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-solana-yield-agent}
+    command: ["npm", "run", "dev"]
+    networks:
+      - agent-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+# ── Networks ─────────────────────────────────────────────────
+networks:
+  agent-network:
+    driver: bridge
+
+# ── Volumes ─────────────────────────────────────────────────
+volumes:
+  chroma-data:   # Persists vector embeddings
+  agent-data:    # Persists SQLite DB

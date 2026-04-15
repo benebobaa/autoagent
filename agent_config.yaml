@@ -1,0 +1,204 @@
+# ============================================================
+# Solana Yield Agent — Runtime Configuration
+# All tunable thresholds, rules, and protocol settings.
+# Secrets (API keys, bot tokens) must be in .env, not here.
+# ============================================================
+
+# Risk buckets — assign each protocol a trust score (0-100)
+protocols:
+  kamino_lending:
+    trust_score: 90
+    enabled: false    # aggressive mode: disabled — too low APY for DLMM focus
+  kamino_vaults:
+    trust_score: 85
+    enabled: true     # keep — some vaults hit 20%+
+  marginfi:
+    trust_score: 85
+    enabled: false    # aggressive mode: disabled — too low APY
+  jito:
+    trust_score: 95
+    enabled: true     # keep — safe SOL staking baseline
+  meteora_dlmm:
+    trust_score: 80
+    enabled: true
+
+# Scoring thresholds
+scoring:
+  min_apy_pct: 5.0              # aggressive mode: 5%+ floor — keeps Jito/Kamino Vaults, blocks dead-weight lending
+  min_tvl_usd: 10000            # aggressive mode: lowered to $10k — allows discovery sweet spot
+  min_score_to_suggest: 40      # max aggressive: wider funnel for discovery DLMM pools
+  min_score_to_watch: 40        # Score 0-100; WATCH if above this
+  data_uncertainty_threshold_pct: 15  # Flag if DefiLlama vs protocol API differ by this %
+
+# Position sizing
+position:
+  max_position_usd: 100         # 5×$100 = $500 fully deployed across discovery pools
+  max_open_positions: 5         # more slots = more discovery pool exposure simultaneously
+  min_position_usd: 50
+  max_group_concentration_pct: 90  # allow heavy DLMM concentration
+
+# Deterministic allocation engine
+allocator:
+  enabled: true
+  target_utilization_pct: 95    # deploy 95% ($475 on $500)
+  scout_enabled_paper: false
+  scout_min_score: 45
+  scout_max_positions: 0
+  scout_position_usd: 75
+  cooldown_hours_after_bad_exit: 0   # no cooldown in paper mode — redeploy immediately
+
+# Risk guardrails
+risk:
+  circuit_breaker_drawdown_pct: 4.0   # Pause new positions if portfolio down this %
+  max_gas_usd: 0.50                   # Skip if estimated gas > this
+
+# Rebalancing (Phase 1: flag only, do not auto-execute)
+rebalance:
+  apy_drop_trigger_pct: 30            # Flag for rebalance if APY drops this % from entry
+  check_interval_hours: 1
+
+# Paper trading — simulate agent decisions without risking real capital
+# Overridable via env: PAPER_TRADING=true, PAPER_STARTING_BALANCE_USD=100
+paper_trading:
+  enabled: false
+  starting_balance_usd: 500    # Virtual portfolio size for 7-day test run
+
+# Reporting & scheduling
+reporting:
+  daily_report_cron: "0 7 * * *"      # 07:00 server time
+  scan_cron: "0 6 * * *"              # 06:00 server time
+  monitor_cron: "0 * * * *"           # Every hour
+
+# Regime detection thresholds
+regime:
+  bull_threshold_pct: 15       # 7d SOL change > 15% = BULL_TREND
+  bear_threshold_pct: -15       # 7d SOL change < -15% = BEAR_TREND
+  high_vol_atr_ratio: 0.03   # ATR/price > 3% = HIGH_VOL_RANGE
+  low_vol_atr_ratio: 0.015   # ATR/price < 1.5% = LOW_VOL_RANGE
+  capitulation_drop_pct: 25   # 48h drop > 25% = CAPITULATION
+  euphoria_rise_pct: 40       # 7d rise > 40% = EUPHORIA
+
+# Signal detection thresholds (Tier 2 — rule-based, no LLM)
+signals:
+  tvl_collapse_pct: 0.30              # CRITICAL: pool TVL drops >30% between snapshots
+  portfolio_drawdown_pct: 4.0         # CRITICAL: portfolio MtM drops >4%
+  il_max_tolerance_pct: 5.0           # aggressive mode: tolerate more IL on volatile DLMM pools
+  apy_drift_pct: 0.15                 # exit if APY drops >15% from entry (was 20%) — cycle faster
+  better_pool_delta_pp: 5.0           # switch pools only if new pool has 5pp+ advantage (avoid churn)
+  liquidity_crunch_pct: 0.40          # HIGH: pool TVL drops >40%
+  regime_shift_pct: 0.08              # HIGH: SOL price moves >8% between snapshots
+  high_yield_apy_threshold_pct: 10.0  # LOW: new untracked pool APY > 10%
+  position_aging_days: 14             # LOW: position held longer than 14 days
+
+# LLM configuration — multi-provider adapter
+# Supported providers: anthropic, openai, deepseek, openrouter
+# Secrets go in .env (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY), never here.
+# OpenRouter models should use provider-qualified ids such as anthropic/claude-4-sonnet or openai/gpt-4o.
+llm:
+  default:
+    provider: deepseek
+    model: deepseek-reasoner
+    temperature: 1   # reasoner models require temperature=1
+  # Example OpenRouter config:
+  # default:
+  #   provider: openrouter
+  #   model: anthropic/claude-4-sonnet
+  #   temperature: 0
+  # Per-agent overrides — comment out to use default for all agents
+  # overrides:
+  #   reporter:
+  #     provider: anthropic
+  #     model: claude-haiku-4-5-20251001
+  #     temperature: 0
+
+# Polling intervals (Tier 1 + Tier 2)
+polling:
+  data_poll_interval_sec: 300         # Tier 1: fetch market data every 5 min
+  signal_detect_interval_sec: 900     # Tier 2: detect signals every 15 min
+
+# Dispatcher priority lanes (Tier 4)
+dispatch:
+  critical_delay_sec: 0               # Fire immediately on CRITICAL
+  high_batch_interval_sec: 3600       # Batch HIGH signals hourly
+  low_batch_interval_sec: 3600        # Batch LOW signals hourly
+
+# RAG knowledge base
+rag:
+  embedding_provider: openai
+  embedding_model: text-embedding-3-small
+
+# Meteora DLMM settings
+meteora:
+  enabled: true
+  min_tvl_usd: 100000
+  min_fee_apr: 0.08              # 8% annualised (lowered from 20% — SOL-USDC top pools earn 11-19% today)
+  max_il_tolerance: 0.05         # 5% — same as other protocols
+  better_opportunity_delta: 0.10 # 10% APR advantage to justify switch
+  max_position_size_usd: 10000   # conservative until calibrated
+  bin_step_rules:
+    stablecoin_pairs:
+      max_bin_step: 10
+    bluechip_pairs:             # SOL, ETH, BTC
+      max_bin_step: 50
+    volatile_pairs:             # memecoins, small caps
+      max_bin_step: 150
+  out_of_range_alert_polls: 4   # CRITICAL signal after 4 consecutive out-of-range polls
+  active_bin_liquidity_min_pct: 0.15
+  fee_apr_collapse_threshold: 0.60  # 60% drop triggers HIGH signal
+  volume_spike_multiplier: 3.0
+  preferred_strategy: "BidAsk"
+  allowed_pairs:
+    - "SOL-USDC"
+    - "SOL-USDT"
+    - "JitoSOL-SOL"
+    - "mSOL-SOL"
+
+  # ── Position Management (hard close rules, fee claiming) ────────────────
+  management:
+    out_of_range_wait_minutes: 15    # aggressive mode: faster OOR exit (was 30 min)
+    out_of_range_bins_to_close: 5    # aggressive mode: tighter OOR tolerance (was 10)
+    stop_loss_pct: -20               # aggressive mode: tighter stop-loss (was -50%)
+    take_profit_pct: 3               # fixed TP fallback (used only when trailing is disabled)
+    trailing_take_profit_enabled: true  # trail the peak instead of fixed TP
+    trail_arm_profit_pct: 3          # arm trailing TP once PnL >= 3%
+    trail_drawdown_pct: 1.5          # close if PnL retraces 1.5% from peak
+    min_fee_per_tvl_24h: 7           # 7% fee/TVL/24h floor
+    min_claim_amount_usd: 5          # Claim when unclaimed fees >= $5
+    auto_swap_after_close: true      # Swap base token → SOL via Jupiter after close
+    management_interval_minutes: 10  # How often to run the monitor (minutes)
+
+  # ── Discovery Mode (aggressive pool scanning) ────────────────────────────
+  # When enabled, replaces the allowed_pairs scanner with the Pool Discovery API.
+  # Scans 50k+ pools filtered to the high-fee sweet spot ($10k–$150k TVL).
+  # Set enabled: true when ready to trade memecoin/small-cap DLMM pools.
+  discovery:
+    enabled: true           # aggressive pool scanning active
+    timeframe: "1h"          # 1h gives stable fee/TVL data; 5m was too narrow → 0-3 pools
+    # Token quality filters
+    min_mcap: 100000
+    max_mcap: 10000000
+    min_holders: 100          # was 200 — widened to catch more small-cap tokens
+    min_organic_score: 60   # aggressive mode (was 40)
+    min_global_fees_sol: 15  # was 30 — slight widening; still skips bundled/scam tokens
+    # Pool quality filters
+    min_tvl: 10000
+    max_tvl: 150000
+    min_volume: 500
+    min_bin_step: 80
+    max_bin_step: 125
+    min_fee_tvl_ratio: 0.30   # 0.30%/hr = 7.2%/day minimum fee quality floor
+    # Holder concentration hard skips
+    max_top10_holder_pct: 60
+    max_bundler_pct: 30
+    # Blacklists
+    blacklisted_launchpads:
+      - "pump.fun"
+      - "letsbonk.fun"
+    blacklisted_tokens: []
+
+# Tiered capital allocation + active DLMM runtime toggles
+risk_tiers:
+  active_tiers: [2, 5, 8]
+  enable_meme_discovery: true        # paper mode: scan meme/small-cap pools
+  discovery_scan_interval_min: 10    # scan faster
+  paper_approval_tiers: []           # NO approval gates in paper mode — auto-open everything
