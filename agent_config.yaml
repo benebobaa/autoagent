@@ -91,9 +91,10 @@ signals:
   position_aging_days: 14             # LOW: position held longer than 14 days
 
 # LLM configuration — multi-provider adapter
-# Supported providers: anthropic, openai, deepseek, openrouter
-# Secrets go in .env (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY), never here.
+# Supported providers: anthropic, openai, deepseek, openrouter, mimo
+# Secrets go in .env (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, MIMO_API_KEY), never here.
 # OpenRouter models should use provider-qualified ids such as anthropic/claude-4-sonnet or openai/gpt-4o.
+# MiMo uses the OpenAI-compatible endpoint. Optional env: MIMO_BASE_URL=https://api.xiaomimimo.com/v1
 llm:
   default:
     provider: deepseek
@@ -107,9 +108,13 @@ llm:
   # Per-agent overrides — comment out to use default for all agents
   # overrides:
   #   reporter:
-  #     provider: anthropic
-  #     model: claude-haiku-4-5-20251001
-  #     temperature: 0
+  #     provider: mimo
+  #     model: mimo-v2.5
+  #     temperature: 0.3
+  #   analyst:
+  #     provider: mimo
+  #     model: mimo-v2.5-pro
+  #     temperature: 0.7
 
 # Polling intervals (Tier 1 + Tier 2)
 polling:

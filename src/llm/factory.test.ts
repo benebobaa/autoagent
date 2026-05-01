@@ -29,4 +29,30 @@ describe('createLLM', () => {
     expect(openRouterModel.siteName).toBe('Yield Agent');
     expect(openRouterModel._llmType?.()).toBe('openrouter');
   });
+
+  it('creates a MiMo-backed OpenAI-compatible chat model', async () => {
+    const llm = await createLLM({
+      provider: 'mimo',
+      model: 'mimo-v2.5',
+      temperature: 0.3,
+      apiKey: 'mimo-test-key',
+      baseUrl: 'https://api.xiaomimimo.com/v1',
+    });
+
+    const mimoModel = llm as {
+      model?: string;
+      modelName?: string;
+      apiKey?: string;
+      openAIApiKey?: string;
+      temperature?: number;
+      clientConfig?: { baseURL?: string };
+      _llmType?: () => string;
+    };
+
+    expect(mimoModel.model ?? mimoModel.modelName).toBe('mimo-v2.5');
+    expect(mimoModel.apiKey ?? mimoModel.openAIApiKey).toBe('mimo-test-key');
+    expect(mimoModel.temperature).toBe(0.3);
+    expect(mimoModel.clientConfig?.baseURL).toBe('https://api.xiaomimimo.com/v1');
+    expect(mimoModel._llmType?.()).toBe('openai');
+  });
 });

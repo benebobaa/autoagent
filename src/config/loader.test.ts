@@ -83,4 +83,39 @@ describe('loadConfig', () => {
       rmSync(dirname(configPath), { recursive: true, force: true });
     }
   });
+
+  it('injects the MiMo key and base URL for a per-agent override', () => {
+    process.env['SOLANA_RPC_URL'] = 'https://example.invalid';
+    process.env['DATABASE_URL'] = 'postgresql://yield_agent:yield_agent@localhost:5432/yield_agent';
+    process.env['MIMO_API_KEY'] = 'mimo-test-key';
+    process.env['MIMO_BASE_URL'] = 'https://api.xiaomimimo.com/v1';
+
+    const configPath = writeTempConfig((base) =>
+      base.replace(
+        /llm:\n  default:\n    provider: deepseek\n    model: deepseek-reasoner\n    temperature: 1   # reasoner models require temperature=1\n(?:[\s\S]*?)# Polling intervals \(Tier 1 \+ Tier 2\)/,
+        `llm:
+  default:
+    provider: deepseek
+    model: deepseek-reasoner
+    temperature: 1
+  overrides:
+    reporter:
+      provider: mimo
+      model: mimo-v2.5
+      temperature: 0.3
+
+# Polling intervals (Tier 1 + Tier 2)`,
+      ),
+    );
+
+    try {
+      const config = loadConfig(configPath);
+
+      expect(config.llm.overrides?.['reporter']?.provider).toBe('mimo');
+      expect(config.llm.overrides?.['reporter']?.apiKey).toBe('mimo-test-key');
+      expect(config.llm.overrides?.['reporter']?.baseUrl).toBe('https://api.xiaomimimo.com/v1');
+    } finally {
+      rmSync(dirname(configPath), { recursive: true, force: true });
+    }
+  });
 });

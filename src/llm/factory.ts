@@ -7,7 +7,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 // provider-agnostic. Dynamic imports keep unused SDKs from failing at startup.
 // ---------------------------------------------------------------------------
 
-export type LLMProvider = 'anthropic' | 'openai' | 'deepseek' | 'openrouter';
+export type LLMProvider = 'anthropic' | 'openai' | 'deepseek' | 'openrouter' | 'mimo';
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -72,6 +72,17 @@ export async function createLLM(config: LLMConfig): Promise<BaseChatModel> {
         ...(config.baseUrl !== undefined ? { baseURL: config.baseUrl } : {}),
         ...(config.siteUrl !== undefined ? { siteUrl: config.siteUrl } : {}),
         ...(config.siteName !== undefined ? { siteName: config.siteName } : {}),
+      }) as unknown as BaseChatModel;
+    }
+    case 'mimo': {
+      const { ChatOpenAI } = await import('@langchain/openai');
+      const apiKey = config.apiKey ?? process.env['MIMO_API_KEY'];
+      const baseURL = config.baseUrl ?? process.env['MIMO_BASE_URL'] ?? 'https://api.xiaomimimo.com/v1';
+      return new ChatOpenAI({
+        model: config.model,
+        temperature: config.temperature ?? 0.3,
+        ...(apiKey !== undefined ? { apiKey } : {}),
+        configuration: { baseURL },
       }) as unknown as BaseChatModel;
     }
     default: {
