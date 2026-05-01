@@ -172,7 +172,7 @@ const SignalsConfigSchema = z.object({
 
 // LLM config per-provider
 const LLMProviderConfigSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'deepseek', 'openrouter']).default('anthropic'),
+  provider: z.enum(['anthropic', 'openai', 'deepseek', 'openrouter', 'mimo']).default('anthropic'),
   model: z.string().default('claude-sonnet-4-20250514'),
   temperature: z.number().default(0),
   apiKey: z.string().optional(), // injected from env, not stored in YAML
@@ -306,20 +306,27 @@ export function loadConfig(configPath?: string): AgentConfig {
       case 'openai': return process.env['OPENAI_API_KEY'];
       case 'deepseek': return process.env['DEEPSEEK_API_KEY'];
       case 'openrouter': return process.env['OPENROUTER_API_KEY'];
+      case 'mimo': return process.env['MIMO_API_KEY'];
       default: return undefined;
     }
   };
 
   const getProviderRuntimeFields = (provider: string, config: Record<string, unknown> | undefined) => {
-    if (provider !== 'openrouter') {
-      return {};
+    if (provider === 'mimo') {
+      return {
+        baseUrl: process.env['MIMO_BASE_URL'] ?? config?.['baseUrl'] ?? 'https://api.xiaomimimo.com/v1',
+      };
     }
 
-    return {
-      baseUrl: process.env['OPENROUTER_BASE_URL'] ?? config?.['baseUrl'],
-      siteUrl: process.env['OPENROUTER_SITE_URL'] ?? config?.['siteUrl'],
-      siteName: process.env['OPENROUTER_SITE_NAME'] ?? config?.['siteName'],
-    };
+    if (provider === 'openrouter') {
+      return {
+        baseUrl: process.env['OPENROUTER_BASE_URL'] ?? config?.['baseUrl'],
+        siteUrl: process.env['OPENROUTER_SITE_URL'] ?? config?.['siteUrl'],
+        siteName: process.env['OPENROUTER_SITE_NAME'] ?? config?.['siteName'],
+      };
+    }
+
+    return {};
   };
 
   const parsedObj = parsed as Record<string, any>;
