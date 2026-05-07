@@ -3,6 +3,12 @@ dist
 .env
 .env.bak
 .env.docker
-*.txt
-data
-temp-pla
+.env.*.bak
+
+# Session logs from coding agents
+*-session.jsonl
+*-session-*.txt
+
+# Runtime data
+data/
+temp-pla/
